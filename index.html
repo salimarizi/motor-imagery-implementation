@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Robot Arm in Three.js</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+
+  <body>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/103/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.6/dat.gui.min.js"></script>
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"
+      integrity="sha512-luMnTJZ7oEchNDZAtQhgjomP1eZefnl82ruTH/3Oj/Yu5qYtwL7+dVRccACS/Snp1lFXq188XFipHKYE75IaQQ=="
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    ></script>
+
+    <script>
+      const scene = new THREE.Scene();
+
+      // Camera setup
+      var aspect = window.innerWidth / window.innerHeight;
+      var camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 1000);
+      camera.position.z = 10;
+      camera.position.x = 0;
+      camera.position.y = 5;
+      camera.lookAt(0, 0, 0);
+      camera.updateProjectionMatrix();
+
+      // Renderer setup
+      var renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.body.appendChild(renderer.domElement);
+
+      // Create object
+      function createObject(material) {
+        var base = new THREE.Mesh(new THREE.BoxGeometry(2, 1, 2), material);
+        var shoulder = new THREE.Object3D();
+        shoulder.translateY(0.5);
+        base.add(shoulder);
+        var lowerArm = new THREE.Mesh(
+          new THREE.BoxGeometry(0.5, 2, 0.5),
+          material
+        );
+        lowerArm.translateY(1);
+        shoulder.add(lowerArm);
+        return base;
+      }
+
+      var material = new THREE.MeshStandardMaterial();
+      var base1 = createObject(material); // Robot arm 1 (right hand)
+      scene.add(base1);
+
+      var base2 = createObject(material); // Robot arm 2 (left hand)
+      base2.position.x = 4;
+      scene.add(base2);
+
+      // Lights
+      var light = new THREE.DirectionalLight(0xffffff, 1.0);
+      light.position.set(10, 5, 10);
+      light.target = base1;
+      scene.add(light);
+
+      light = new THREE.AmbientLight(0xffffff, 0.5);
+      scene.add(light);
+
+      // Options for controlling the shoulder rotations
+      var options = {
+        shoulder1: -90, // Initial position for shoulder 1
+        shoulder2: -90, // Initial position for shoulder 2
+      };
+
+      // WebSocket setup using Socket.IO with reconnection options
+      const socket = io("http://localhost:3004", {
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+        timeout: 20000,
+      });
+
+      // Listen to socket events and update based on the received command
+      socket.on("connect", () => {
+        console.log("Connected to socket server.");
+      });
+
+      socket.on("disconnect", () => {
+        console.log("Disconnected from server. Reconnecting...");
+      });
+
+      socket.on("controlRobotArm", (command) => {
+        console.log("Received command:", command);
+        switch (command) {
+          case "raise right hand":
+            if (options.shoulder1 < 0) options.shoulder1 += 10;
+            if (options.shoulder2 > -90) options.shoulder2 -= 10;
+            break;
+          case "raise left hand":
+            if (options.shoulder2 < 0) options.shoulder2 += 10;
+            if (options.shoulder1 > -90) options.shoulder1 -= 10;
+            break;
+          case "raise both hands":
+            if (options.shoulder1 < 0) options.shoulder1 += 10;
+            if (options.shoulder2 < 0) options.shoulder2 += 10;
+            break;
+          case "idle":
+            options.shoulder1 = -90;
+            options.shoulder2 = -90;
+            break;
+          default:
+            console.log("Unknown command received:", command);
+        }
+      });
+
+      socket.on("connect_error", (error) => {
+        console.log("Connection error:", error);
+      });
+
+      // Rendering function
+      var zAxis = new THREE.Vector3(0, 0, 1);
+
+      function render() {
+        requestAnimationFrame(render);
+
+        // Rotate shoulders based on options
+        base1.children[0].setRotationFromAxisAngle(
+          zAxis,
+          (options.shoulder1 * Math.PI) / 180
+        );
+        base2.children[0].setRotationFromAxisAngle(
+          zAxis,
+          (options.shoulder2 * Math.PI) / 180
+        );
+
+        renderer.render(scene, camera);
+      }
+
+      render();
+    </script>
+  </body>
+</html>
