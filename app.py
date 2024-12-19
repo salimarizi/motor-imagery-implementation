@@ -17,7 +17,7 @@ app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Paths to model and preprocessing parameters
-MODEL_PATH = './model.h5'
+MODEL_PATH = './model_all_data.h5'
 PREPROCESSING_PARAMS_PATH = './preprocessing_params.pkl'
 
 # Load the trained model
