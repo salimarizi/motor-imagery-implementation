@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import tensorflow as tf
 import pickle
+import threading
 import time
 
 app = Flask(__name__)
@@ -24,17 +25,17 @@ scaler = preprocessing_params['scaler']
 spatial_filters = preprocessing_params['spatial_filters']
 window_size = preprocessing_params['window_size']
 step_size = preprocessing_params['step_size']
-label_mapping = preprocessing_params['label_mapping']  # If needed later
+label_mapping = preprocessing_params['label_mapping']
 
 # Function to preprocess input signals
 def preprocess_input_signals(signals):
     if len(signals) < window_size:
         print(f"Not enough data to form even one window. Signal length: {len(signals)}")
         return np.array([])
-    
+
     flattened_window = signals.reshape(1, -1)
     csp_features = np.dot(flattened_window, spatial_filters)
-    
+
     # Apply saved CSP spatial filters
     features = scaler.transform(csp_features)
     return features
@@ -51,8 +52,8 @@ def label_to_command(label):
 def predict_and_send_commands_window(signals):
     features_normalized = preprocess_input_signals(signals)
     if features_normalized.size == 0:
-        return  # If no valid features are returned, skip this window
-    
+        return
+
     y_pred_probs = model.predict(features_normalized)
     y_pred = np.argmax(y_pred_probs, axis=1)
 
@@ -63,16 +64,12 @@ def predict_and_send_commands_window(signals):
         time.sleep(0.5)
 
 # Real-time classification simulation
-def simulate_real_time_classification(signal_file_path, model):
-    """
-    Simulate real-time signal classification and send results to socket.
-    - signal_file_path: Path to CSV or Excel file containing EEG signals
-    """
+def simulate_real_time_classification(signal_file_path):
     if signal_file_path.endswith('.xlsx'):
         df = pd.read_excel(signal_file_path)
     else:
         df = pd.read_csv(signal_file_path)
-    
+
     # Extract signals (for example, CH1, CH2, CH3, CH4 columns)
     signals = df[['CH1', 'CH2', 'CH3', 'CH4']].values
 
@@ -81,13 +78,16 @@ def simulate_real_time_classification(signal_file_path, model):
         window = signals[start:start + window_size]
         predict_and_send_commands_window(window)
 
-# ---------------- Main Execution ----------------
-if __name__ == '__main__':
-    # Path to the input EEG signal file
-    input_signal_file = './test.xlsx'
+# Background thread to run classification
+def background_task():
+    input_signal_file = './test.xlsx'  # Path to your signal file
+    while True:
+        simulate_real_time_classification(signal_file_path=input_signal_file)
+        time.sleep(5)  # Optional: Run predictions every 5 seconds
 
-    # Run the classification simulation
-    simulate_real_time_classification(
-        signal_file_path=input_signal_file,
-        model=model
-    )
+# Main execution
+if __name__ == '__main__':
+    thread = threading.Thread(target=background_task)
+    thread.daemon = True
+    thread.start()
+    socketio.run(app, host="0.0.0.0", port=3004)

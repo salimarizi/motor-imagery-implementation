@@ -6,6 +6,8 @@ import numpy as np
 import tensorflow as tf
 import pickle
 import time
+import threading
+
 
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtGui, QtCore
@@ -127,7 +129,12 @@ class Graph:
 
         self.app.processEvents()
 
-def main():
+def start_socketio():
+    # Run the Socket.IO server in a separate thread
+    socketio.run(app, host="0.0.0.0", port=3004, allow_unsafe_werkzeug=True)
+
+def start_gui():
+    # All GUI-related operations must be performed on the main thread
     BoardShim.enable_dev_board_logger()
     logging.basicConfig(level=logging.DEBUG)
 
@@ -137,15 +144,19 @@ def main():
         board_shim = BoardShim(BoardIds.MINDROVE_WIFI_BOARD, params)
         board_shim.prepare_session()
         board_shim.start_stream()
-        Graph(board_shim)
+        Graph(board_shim)  # GUI initialization
     except BaseException:
-        logging.warning('Exception', exc_info=True)
+        logging.warning("Exception", exc_info=True)
     finally:
-        logging.info('End')
+        logging.info("End")
         if board_shim.is_prepared():
-            logging.info('Releasing session')
+            logging.info("Releasing session")
             board_shim.release_session()
 
-if __name__ == '__main__':
-    socketio.run(app, host="0.0.0.0", port=3004, allow_unsafe_werkzeug=True)
-    main()
+if __name__ == "__main__":
+    # Start the Socket.IO server in a separate thread
+    socketio_thread = threading.Thread(target=start_socketio, daemon=True)
+    socketio_thread.start()
+
+    # Start the GUI on the main thread
+    start_gui()
